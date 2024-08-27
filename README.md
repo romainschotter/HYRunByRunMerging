@@ -1,4 +1,4 @@
-# HYRunByRunMerging
+# Hyperloop run-by-run merging
 
 Repository containing files for downloading all output files from Hyperloop run by run, and merging locally only the files associated to a given run list.
 
