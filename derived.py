@@ -1,3 +1,22 @@
+# Copyright 2019-2020 CERN and copyright holders of ALICE O2.
+# See https://alice-o2.web.cern.ch/copyright for details of the copyright holders.
+# All rights not expressly granted are reserved.
+#
+# This software is distributed under the terms of the GNU General Public
+# License v3 (GPL Version 3), copied verbatim in the file "COPYING".
+#
+# In applying this license CERN does not waive the privileges and immunities
+# granted to it by virtue of its status as an Intergovernmental Organization
+# or submit itself to any jurisdiction
+#
+##
+## \file   derived.py
+## \author Originally: David Chinellato <david.dobrigkeit.chinellato@cern.ch>
+## \author Modification by: Romain Schotter <romain.schotter@cern.ch>
+##
+## \brief  Scripts to download output files run by run
+##
+
 from os import path
 import os
 import json
@@ -25,9 +44,9 @@ def run_cmd(cmd):
         return
     if "capture_output" in inspect.signature(subprocess.run).parameters:
         # Python 3.7+
-        run_result = subprocess.run(cmd, capture_output=not VERBOSE_MODE)
+        run_result = subprocess.run(cmd, shell=True, capture_output=not VERBOSE_MODE)
     else:
-        run_result = subprocess.run(cmd)
+        run_result = subprocess.run(cmd, shell=True)
     #print(run_result)
     return run_result
 
@@ -141,6 +160,7 @@ def getXMLList(train_id=251632,
                key_file="~/.globus/userkey.pem",
                cert_file="~/.globus/usercert.pem"):
     out_name = path.join(out_path, f"HyperloopID_{train_id}.json")
+    print(path)
     if not path.isfile(key_file):
         print("Cannot find key file", key_file)
     if not path.isfile(cert_file):
