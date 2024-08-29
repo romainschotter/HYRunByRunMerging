@@ -13,7 +13,7 @@ In order to merge only the files from a certain runlist, one needs first to down
 
 ### Downloading files run by run
 Before executing the script `derived.py`, 
-- edit the line 138 with your train ID. For instance, let's say we want to download all the files from the train `251632`, the line 138 should be `def getXMLList(train_id=251632,`.
+- edit the line 157 with your train ID. For instance, let's say we want to download all the files from the train `251632`, the line 138 should be `def getXMLList(train_id=251632,`.
 - load a O2/O2Physics environment,
 - load your certificates and
 - proceed to downloading all the files run by run by typing `python3 derived.py`.
