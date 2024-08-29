@@ -20,12 +20,6 @@ Before executing the script `derived.py`,
 
 The script will first download a json file containing the info of the job results related to the corresponding train ID, and then it will download the output file of each job.
 
-Once this is done, 
-- edit the line 138 with your train ID (again, in our previous example, it should be `def getXMLList(train_id=251632,`),
-- load a O2/O2Physics environment,
-- load your certificates and
-- proceed to downloading all the files run by run by typing `python3 derived.py`.
-
 ### Merging files locally based on the run number
 After executing the script `derived.py`, a new directory should be present called `alice`. It should contain numerous subdirectories, each containing two files: AO2D.root and download_summary.txt.
 
