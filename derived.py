@@ -38,7 +38,7 @@ DRY_MODE_RUNNING = False
 
 def run_cmd(cmd):
     #print("Running command:", f"`{cmd}`")
-    cmd = cmd.split()
+    # cmd = cmd.split()
     if DRY_MODE_RUNNING:
         print("Dry mode!!!")
         return
