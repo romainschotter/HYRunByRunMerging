@@ -5,7 +5,7 @@ Repository containing files for downloading all output files from Hyperloop run 
 ## What is present?
 Two files are present in the repository:
 - `derived.py`, a Python script to be used for regular trains, in charge of downloading all AnalysisResults.root files from Hyperloop run by run,
-- `derived2.py`, a Python script to be for trains PRODUCING DERIVED DATA, in charge of downloading all derived AO2D.root and AnalysisResults.root files from Hyperloop run by run,
+- `derived2.py`, a Python script to be used for trains PRODUCING DERIVED DATA, in charge of downloading all derived AO2D.root and AnalysisResults.root files from Hyperloop run by run,
 - `mergeFile.sh`, a bash script in charge of merging the files associated to a given run list.
 
 ## How to run it?
