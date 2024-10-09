@@ -76,7 +76,7 @@ def getXMLList(train_id=272211, alien_path="https://alimonitor.cern.ch/alihyperl
     return sub_file_list
 
 def main():
-    xml_list = getXMLList(272211)
+    xml_list = getXMLList(273979)
     for xml in xml_list:
         print(xml.alien_path)
         xml.copy_from_alien(file_type="AnalysisResults.root")
