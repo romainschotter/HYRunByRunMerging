@@ -21,7 +21,7 @@ To merge files from a specific run list, you first need to download them. This i
 #### Steps:
 1. **Edit the Train ID**:
    - Open `hyperDownload.py` and modify **line 79** with your train ID.
-   - For example, to download files from train `272211`, modify line 157 to:  
+   - For example, to download files from train `272211`, modify **line 79** to:  
      ```python
      xml_list = getXMLList(272211)
      ```
