@@ -92,4 +92,3 @@ For any further assistance, feel free to contact us:
 - **Email**:  
    - Romain Schotter: [romain.schotter@cern.ch](mailto:romain.schotter@cern.ch)
    - Roman Nepeivoda: [roman.nepeivoda@cern.ch](mailto:roman.nepeivoda@cern.ch)
-   - 
