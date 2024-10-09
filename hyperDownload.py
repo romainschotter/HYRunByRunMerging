@@ -22,7 +22,7 @@ class HyperloopDownloader:
             raise RuntimeError(f"Path {path} is already an alien path")
         return "alien://" + path
 
-    def copy_from_alien(self, file_type, write_download_summary=True, overwrite=False, overwrite_summary=True):
+    def copy_from_alien(self, file_type):
             alien_ls_parent = subprocess.run(f"alien_ls {self.alien_path}", shell=True, capture_output=True, text=True)
             alien_paths = []
 
