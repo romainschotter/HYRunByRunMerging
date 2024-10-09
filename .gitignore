@@ -1,0 +1,4 @@
+*.root
+.DS_Store
+*.txt
+*.json
