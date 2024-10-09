@@ -13,11 +13,9 @@ def run_cmd(cmd):
         return
     return subprocess.run(cmd, shell=True, capture_output=not VERBOSE_MODE)
 
-class HyperloopOutput:
-    def __init__(self, json_entry, out_path="./"):
+class HyperloopDownloader:
+    def __init__(self, json_entry):
         self.alien_path = json_entry.get("outputdir")
-        self.run_number = json_entry.get("run")
-        self.root_objects = {}
 
     def get_alien_path(self, path):
         if path.startswith("alien://"):
@@ -58,8 +56,8 @@ class HyperloopOutput:
                 cmd = f"alien_cp -q {self.get_alien_path(path)} file:{directory}"
                 run_cmd(cmd)
 
-def getXMLList(train_id=272211, alien_path="https://alimonitor.cern.ch/alihyperloop-data/trains/train.jsp?train_id=", out_path="./", key_file="~/.globus/userkey.pem", cert_file="~/.globus/usercert.pem"):
-    out_name = path.join(out_path, f"HyperloopID_{train_id}.json")
+def getXMLList(train_id=272211, alien_path="https://alimonitor.cern.ch/alihyperloop-data/trains/train.jsp?train_id=", key_file="~/.globus/userkey.pem", cert_file="~/.globus/usercert.pem"):
+    out_name = f"HyperloopID_{train_id}.json"
 
     for file in (key_file, cert_file):
         if not path.isfile(file):
@@ -70,7 +68,7 @@ def getXMLList(train_id=272211, alien_path="https://alimonitor.cern.ch/alihyperl
 
     with open(out_name) as json_data:
         data = json.load(json_data)
-        sub_file_list = [HyperloopOutput(job, out_path) for job in data["jobResults"] if job["merge_state"] == "done"]
+        sub_file_list = [HyperloopDownloader(job) for job in data["jobResults"] if job["merge_state"] == "done"]
     
     print(f"Found {len(sub_file_list)} jobs to download")
     return sub_file_list
