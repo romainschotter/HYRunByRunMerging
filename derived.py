@@ -1,22 +1,3 @@
-# Copyright 2019-2020 CERN and copyright holders of ALICE O2.
-# See https://alice-o2.web.cern.ch/copyright for details of the copyright holders.
-# All rights not expressly granted are reserved.
-#
-# This software is distributed under the terms of the GNU General Public
-# License v3 (GPL Version 3), copied verbatim in the file "COPYING".
-#
-# In applying this license CERN does not waive the privileges and immunities
-# granted to it by virtue of its status as an Intergovernmental Organization
-# or submit itself to any jurisdiction
-#
-##
-## \file   derived.py
-## \author Originally: David Chinellato <david.dobrigkeit.chinellato@cern.ch>
-## \author Modification by: Romain Schotter <romain.schotter@cern.ch>
-##
-## \brief  Scripts to download output files run by run
-##
-
 from os import path
 import os
 import json
@@ -33,21 +14,10 @@ except ImportError as e:
           "Progress bar will not be available (you can install tqdm for the progress bar) `pip3 install --user tqdm`")
 
 # Modes
-VERBOSE_MODE = False
-DRY_MODE_RUNNING = False
+DOWNLOAD_ALL = True # only in case of downloading derived data! Download ALL AO2Ds and AnalysisResults.root or only those from final merging?
 
-def run_cmd(cmd):
-    #print("Running command:", f"`{cmd}`")
-    # cmd = cmd.split()
-    if DRY_MODE_RUNNING:
-        print("Dry mode!!!")
-        return
-    if "capture_output" in inspect.signature(subprocess.run).parameters:
-        # Python 3.7+
-        run_result = subprocess.run(cmd, shell=True, capture_output=not VERBOSE_MODE)
-    else:
-        run_result = subprocess.run(cmd, shell=True)
-    #print(run_result)
+def run_cmd(cmd, stdout_encoded_in_text = False):
+    run_result = subprocess.run(cmd, shell=True, capture_output=True, text = stdout_encoded_in_text)
     return run_result
 
 class HyperloopOutput:
@@ -62,6 +32,10 @@ class HyperloopOutput:
             self.run_number = json_entry["run"]
         else:
             self.run_number = None
+        if "merge_state" in json_entry:
+            self.merge_state = json_entry["merge_state"]
+        else:
+            self.merge_state = None
         #self.out_path = path.abspath(out_path)
         self.out_path = path.abspath("./")
         # ROOT interface
@@ -117,19 +91,20 @@ class HyperloopOutput:
         return self.__str__()
 
     def copy_from_alien(self,
-                        write_download_summary=True,
-                        overwrite=False,
-                        overwrite_summary=True):
+                        overwrite=False):
         out_path = path.dirname(self.out_filename())
         if not path.isdir(out_path):
             print("Preparing directory", f"`{out_path}`")
             os.makedirs(out_path)
         else:
             print("Directory", f"`{out_path}`", "already present")
-        if write_download_summary and (overwrite_summary or not path.isfile(path.join(out_path, "download_summary.txt"))):
-            with open(path.join(out_path, "download_summary.txt"), "w") as f:
+        
+        # Please open download_summary.txt and fill it 
+        # --> essential for merging because it keeps track of the run number
+        with open(path.join(out_path, "download_summary.txt"), "w") as f:
                 f.write(self.get_alien_path() + "\n")
                 f.write(f"Run{self.get_run()}\n")
+
         if not overwrite and self.exists():
             if self.is_sane():
                 print("File", f"`{self.out_filename()}`",
@@ -141,18 +116,22 @@ class HyperloopOutput:
 
         print("---> Downloading", self.get_alien_path(), "to", self.out_filename())
         cmd = f"alien_cp -q {self.get_alien_path()} file:{self.out_filename()}"
-        run_cmd(cmd)
+        if not run_cmd(cmd).returncode == 0:
+            print("!!! No AO2Ds found in ", self.get_alien_path()," !!!")
         
-        #if "AO2D.root" in self.get_alien_path():
-          #print("---> Downloading AnalysisResults too...");
-          #temporary = self.get_alien_path()
-          #analysisresults = temporary.replace("AO2D.root", "AnalysisResults.root")
-          #temporary = self.out_filename()
-          #analysisresultslocal = temporary.replace("AO2D.root", "AnalysisResults.root")
+        if "AO2D.root" in self.get_alien_path():
+          print("---> Downloading AnalysisResults too...");
+          temporary = self.get_alien_path()
+          analysisresults = temporary.replace("AO2D.root", "AnalysisResults.root")
+          temporary = self.out_filename()
+          analysisresultslocal = temporary.replace("AO2D.root", "AnalysisResults.root")
           
-          #cmd = f"alien_cp -q {analysisresults} file:{analysisresultslocal}"
-          #run_cmd(cmd)
-          #print("---> AR should be at: " + analysisresultslocal)
+          cmd = f"alien_cp -q {analysisresults} file:{analysisresultslocal}"
+          run_cmd(cmd)
+          if not run_cmd(cmd).returncode == 0:
+            print("!!! No AnalysisResults.root found in ", analysisresults, " !!!")
+          else:
+            print("---> AR should be at: " + analysisresultslocal)
 
 def getXMLList(train_id=251632,
                alien_path="https://alimonitor.cern.ch/alihyperloop-data/trains/train.jsp?train_id=",
@@ -160,7 +139,6 @@ def getXMLList(train_id=251632,
                key_file="~/.globus/userkey.pem",
                cert_file="~/.globus/usercert.pem"):
     out_name = path.join(out_path, f"HyperloopID_{train_id}.json")
-    print(path)
     if not path.isfile(key_file):
         print("Cannot find key file", key_file)
     if not path.isfile(cert_file):
@@ -171,76 +149,86 @@ def getXMLList(train_id=251632,
         run_cmd(download_cmd)
         
     sub_file_list = []
+    is_from_analysis = True
     with open(out_name) as json_data:
         data = json.load(json_data)
         to_list = data["jobResults"]
         for i in to_list:
             print(i)
-            hyOut=HyperloopOutput(i, out_path=out_path);
-            # hyOut.alien_path = hyOut.alien_path + "/wn.xml"
-            hyOut.alien_path = hyOut.alien_path + "/AnalysisResults.root"
+            hyOut=HyperloopOutput(i, out_path=out_path)
+            # check whether there is an AnalysisResults.root file exists in the alien path from the HyperloopID file
+            cmd = f"alien_ls {hyOut.alien_path}/AnalysisResults.root"
+            if run_cmd(cmd).returncode == 0: # if yes, then we are dealing with output of analysis task
+                hyOut.alien_path = hyOut.alien_path + "/AnalysisResults.root"
+                is_from_analysis = True
+            else: # otherwise, we are dealing with output of derived producer task
+                hyOut.alien_path = hyOut.alien_path + "/AOD/aod_collection.xml"
+                is_from_analysis = False
+            
+            if( hyOut.merge_state == "done" ):
+                sub_file_list.append(hyOut)
+            else:
+                print("merge_state is not done")
+                print("Skipping")
             print("alien_path internal: "+hyOut.alien_path)
-            if not i["merge_state"]  == "done":
-                continue
-            if os.system("alien_ls " + hyOut.alien_path):
-                print("File not found: " + hyOut.alien_path + ". Skipping...")
-                continue
             sub_file_list.append(hyOut)
+
     print("Found", len(sub_file_list), "xml files to download")
-    return sub_file_list
+    return sub_file_list, is_from_analysis
+
+def hasMergedFiles(alien_repo_AOD):
+        cmd = f"alien.py find {alien_repo_AOD}/ -r -d \".*[0-9]+/$\""
+        return run_cmd(cmd, True)
     
 def getAO2DList(xmlfile="aod_production.xml"):
     print("parse file: "+xmlfile)
-    tree = ET.parse(xmlfile)
-    root = tree.getroot()
-    
+    tree = ET.parse(xmlfile) # convert the xml file into a tree
+    root = tree.getroot() # get the root of the tree, the list of collection in our case
     ao2d_file_list = []
-    for child in root:
-        for element in child:
-            for info in element:
-                print(info.get('lfn'))
+    for child in root: # loop over collections in aod_collection.xml
+        collection_name=str(child.attrib['name'])
+        collection_name=collection_name.replace("aod_collection.xml", "")
+        print(collection_name)
+        listDirMergedAO2D = str(hasMergedFiles(collection_name).stdout).split("\n")
+        # should we download ALL AO2Ds or only focusing on those from final merging?
+        #
+        # --> Download only those from final merging
+        #
+        if not DOWNLOAD_ALL and len(listDirMergedAO2D) > 1: #always one element being empty (= '')
+            for dir in listDirMergedAO2D:
+                if(dir == ''): #always one element being empty (= '')
+                    continue
                 data = {}
-                #data['outputdir'] = info.get('lfn')
-                json_data = json.dumps(data)
+                json_data = json.dumps(data) # dummy json entry to create HyperloopOutput
                 hyOut=HyperloopOutput(json_entry=json_data, out_path="./")
-                hyOut.alien_path = info.get('lfn')
+                hyOut.alien_path = dir + "/AO2D.root"
                 print("alien_path internal for posterior download: "+hyOut.alien_path)
                 ao2d_file_list.append(hyOut)
+        #
+        # --> DOWNLOAD EVERYTHING!
+        #
+        else:
+            for element in child: # loop over event in aod_collection.xml
+                for info in element: # loop over file in aod_collection.xml
+                    print(info.get('lfn'))
+                    data = {}
+                    json_data = json.dumps(data) # dummy json entry to create HyperloopOutput
+                    hyOut=HyperloopOutput(json_entry=json_data, out_path="./")
+                    hyOut.alien_path = info.get('lfn')
+                    print("alien_path internal for posterior download: "+hyOut.alien_path)
+                    ao2d_file_list.append(hyOut)
     return ao2d_file_list
-        
-#    sub_file_list = []
-#    with open(out_name) as json_data:
-#        data = json.load(json_data)
-#        to_list = data["jobResults"]
-#        for i in to_list:
-#            print(i)
 
-        
-#        if list_meged_files:
-#            to_list = data["mergeResults"]
-#        else:
-#
-#        for i in to_list:
-#            sub_file_list.append(HyperloopOutput(i, out_path=out_path))
-        
-#
-#    tree = ET.parse('aod_collection.xml')
-#    root = tree.getroot()
-#    for child in root:
-#        for element in child:
-#            for info in element:
-#                print(info.get('lfn'))
-
-xml_list = getXMLList()
+xml_list, is_from_analysis = getXMLList()
 for xml in xml_list:
   xml.copy_from_alien(overwrite=False)
+  if is_from_analysis: 
+    continue # if output comes from analysis, no need to go further and download AO2Ds
+  # look for the list of AO2Ds to download
   xmlString=xml.out_filename()
-#   print("XML file now at: "+xmlString)
-#   #jsonText = 'outputdir': '/alice/cern.ch/user/a/alihyperloop/jobs/0025/hy_255657'
-#   ao2d_file_list=getAO2DList(xmlfile=xmlString)
-#   print(ao2d_file_list)
-#   downloaded = []
-#   for i in tqdm.tqdm(ao2d_file_list, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}'):
-#     downloaded.append(i.copy_from_alien(overwrite=False))
-          
+  print("XML file now at: "+xmlString)
+  ao2d_file_list=getAO2DList(xmlfile=xmlString)
+  downloaded = []
+  for i in tqdm.tqdm(ao2d_file_list, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}'):
+      downloaded.append(i.copy_from_alien(overwrite=False))
 
