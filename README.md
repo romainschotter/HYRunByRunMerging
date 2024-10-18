@@ -49,5 +49,15 @@ NOTE: the `HyperloopID_#TRAINID.json` should be placed in the same directory as 
 
 Execute the script `derived.py` and the downloading of the file should start.
 
+### NameError: name \'tqdm\' is not defined
+The script `derived.py` uses a Python package called `tqdm` to estimate the remaining time for downloading a file. In case such a package is missing, the script will crash with the above error.
+
+You can install this package by typing `pip install tqdm` or `pip3 install tqdm`. Please note that you HAVE TO type that command inside a O2/O2Physics envrionment or it will not work! because O2/O2Physics uses its own Python installation. 
+The installation may be unsuccessful because `pip` or `pip3` is not installed for the Python version installed with O2/O2Physics. You can however force to use the `pip` that belongs to which ever Python's `python` or `python3` by typing `python3 -m pip install tqdm` or `python3 -m pip3 install tqdm`.
+
+If the installation of the `tqdm` is successful, the following message should be printed: `Successfully installed tqdm-x.xx.x`. From that point, you can proceed to downloading your files via `python3 derived.py`.
+
+In case you are still facing this error after following the above instructions, please find help in the `Others` category.
+
 ### Others
 In case you are facing difficulties: please contact me either on Mattermost (rschotte) or via mail (romain.schotter@cern.ch).
