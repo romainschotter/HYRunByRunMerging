@@ -31,8 +31,8 @@ After executing the script `derived.py`, a new directory should be present calle
 
 To initiate the merging of the AnalysisResults.root files according to a given runlist, 
 - open the file `mergeFile.sh`,
-- edit the line 23 with your desired runlist.
-    BE CAREFUL: this is a Bash array, the elements of an array are separated with spaces, not with commas. SO provide your runlist with space separation, not comma separation.
+- edit the line 22 with your desired runlist, separated with a comma followed by a space like this ", ". If you use different separators, please edit line 23.
+    NOTE: if you copy-paste the runlist from Hyperloop, runs are already separated with ", ", so you don't need to change the separators.
 - Once this is done, in the same directory as the one containing the file `derived.py`, type `bash mergeFile.sh`.
 
 From this stage, all AnalysisResults.root files coming from your train ID and your desired runlist have been merged into one single file :-D
