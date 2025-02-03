@@ -40,5 +40,5 @@ echo "Actually used runlist" >> merge_summary.txt
 echo ${USED_RUN_LIST_LOG::-2} >> merge_summary.txt
 
 # proceed to merging
-hadd -k AnalysisResults_LHC22oRuns.root $(for key in "${!RUN_LIST[@]}"; do string=$(grep -r -l ${RUN_LIST[${key}]} ${INPUT_REPO}) ; echo ${string/download_summary.txt/AnalysisResults.root}; done)
+hadd -k AnalysisResults.root $(for key in "${!RUN_LIST[@]}"; do string=$(grep -r -l ${RUN_LIST[${key}]} ${INPUT_REPO}) ; echo ${string/download_summary.txt/AnalysisResults.root}; done)
 more merge_summary.txt
