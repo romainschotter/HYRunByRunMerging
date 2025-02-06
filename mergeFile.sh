@@ -28,6 +28,8 @@ echo "# Merging summary info #" >> merge_summary.txt
 echo "########################" >> merge_summary.txt
 INITIAL_RUN_LIST_LOG=""
 USED_RUN_LIST_LOG=""
+MISSING_RUN_LIST_LOG=""
+MISSING_RUN_REASON_LOG=""
 for key in "${!RUN_LIST[@]}"; 
 do 
 INITIAL_RUN_LIST_LOG="${INITIAL_RUN_LIST_LOG} ${RUN_LIST[${key}]}, "
@@ -36,13 +38,23 @@ if [ -n "${string}" ]; then # check that directory associated to this run has be
     file_exist=$(find ${string/download_summary.txt//} -name AnalysisResults.root)
     if [ -n "${file_exist}" ]; then # check that there are .root files in that directory (could be missing if merging has not been done)
         USED_RUN_LIST_LOG="${USED_RUN_LIST_LOG} ${RUN_LIST[${key}]}, "
+    else
+        MISSING_RUN_LIST_LOG="${MISSING_RUN_LIST_LOG} ${RUN_LIST[${key}]}, "
+        MISSING_RUN_REASON_LOG=$(printf "${MISSING_RUN_REASON_LOG} - ${RUN_LIST[${key}]}: AnalysisResults.root file not found (please check on Hyperloop if merging was done)\n")
     fi
+else
+    MISSING_RUN_LIST_LOG="${MISSING_RUN_LIST_LOG} ${RUN_LIST[${key}]}, "
+    MISSING_RUN_REASON_LOG=$(printf "${MISSING_RUN_REASON_LOG} - ${RUN_LIST[${key}]}: no directory found for this run (are you sure this run belongs to this dataset?)\n")
 fi
 done
 echo "Initial/wanted runlist" >> merge_summary.txt
 echo ${INITIAL_RUN_LIST_LOG::-2} >> merge_summary.txt
 echo "Actually used runlist" >> merge_summary.txt
 echo ${USED_RUN_LIST_LOG::-2} >> merge_summary.txt
+echo "Missing runs" >> merge_summary.txt
+echo ${MISSING_RUN_LIST_LOG::-2} >> merge_summary.txt
+echo "Reason(s) for missing runs:" >> merge_summary.txt
+printf '%s\n' "${MISSING_RUN_REASON_LOG}" >> merge_summary.txt
 echo "########################" >> merge_summary.txt
 echo "########################" >> merge_summary.txt
 
