@@ -23,21 +23,28 @@ RUN_LIST_STRING="526641, 526964, 527041, 527057, 527109, 527240, 527850, 527871,
 IFS=", " read -ra RUN_LIST <<< "${RUN_LIST_STRING}"
 
 # keep track of which runs are actually used in the merging (some runs might be missing)
-echo "Merging summary info" > merge_summary.txt
+echo "########################" > merge_summary.txt
+echo "# Merging summary info #" >> merge_summary.txt
+echo "########################" >> merge_summary.txt
 INITIAL_RUN_LIST_LOG=""
 USED_RUN_LIST_LOG=""
 for key in "${!RUN_LIST[@]}"; 
 do 
 INITIAL_RUN_LIST_LOG="${INITIAL_RUN_LIST_LOG} ${RUN_LIST[${key}]}, "
 string=$(grep -r -l ${RUN_LIST[${key}]} ${INPUT_REPO}) 
-if [ -n "${string}" ]; then
-    USED_RUN_LIST_LOG="${USED_RUN_LIST_LOG} ${RUN_LIST[${key}]}, "
+if [ -n "${string}" ]; then # check that directory associated to this run has been downloaded
+    file_exist=$(find ${string/download_summary.txt//} -name AnalysisResults.root)
+    if [ -n "${file_exist}" ]; then # check that there are .root files in that directory (could be missing if merging has not been done)
+        USED_RUN_LIST_LOG="${USED_RUN_LIST_LOG} ${RUN_LIST[${key}]}, "
+    fi
 fi
 done
 echo "Initial/wanted runlist" >> merge_summary.txt
 echo ${INITIAL_RUN_LIST_LOG::-2} >> merge_summary.txt
 echo "Actually used runlist" >> merge_summary.txt
 echo ${USED_RUN_LIST_LOG::-2} >> merge_summary.txt
+echo "########################" >> merge_summary.txt
+echo "########################" >> merge_summary.txt
 
 # proceed to merging
 hadd -k AnalysisResults.root $(for key in "${!RUN_LIST[@]}"; do string=$(grep -r -l ${RUN_LIST[${key}]} ${INPUT_REPO}) ; echo ${string/download_summary.txt/AnalysisResults.root}; done)
