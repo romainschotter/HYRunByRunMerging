@@ -44,7 +44,7 @@ if [ -n "${string}" ]; then # check that directory associated to this run has be
     fi
 else
     MISSING_RUN_LIST_LOG="${MISSING_RUN_LIST_LOG} ${RUN_LIST[${key}]}, "
-    MISSING_RUN_REASON_LOG=$(printf "${MISSING_RUN_REASON_LOG} - ${RUN_LIST[${key}]}: no directory found for this run (are you sure this run belongs to this dataset?)\n")
+    MISSING_RUN_REASON_LOG=$(printf "${MISSING_RUN_REASON_LOG}\n - ${RUN_LIST[${key}]}: no directory found for this run (are you sure this run belongs to this dataset?)\n")
 fi
 done
 echo "Initial/wanted runlist" >> merge_summary.txt
