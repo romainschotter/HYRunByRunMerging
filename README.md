@@ -6,6 +6,7 @@ Repository containing files for downloading all output files from Hyperloop run 
 Two files are present in the repository:
 - `derived.py`, a Python script in charge of downloading all AnalysisResults.root (and AO2D.root in case of derived data) files from Hyperloop run by run,
 - `mergeFile.sh`, a bash script in charge of merging the files associated to a given run list.
+- `mergeByCommonRun.sh`, a bash script in charge of merging only the files in common in two datasets and according to a given run list.
 
 ## How to run it?
 
@@ -39,6 +40,21 @@ To initiate the merging of the AnalysisResults.root files according to a given r
 - Once this is done, in the same directory as the one containing the file `derived.py`, type `bash mergeFile.sh`.
 
 From this stage, all AnalysisResults.root files coming from your train ID and your desired runlist have been merged into one single file :-D
+
+### Merging files locally from runs in common between two datasets and based on the run number
+This section only applies to the case where we want to merge the output from two analysis trains (not from a derived data production) in such a way that we consider only the runs belonging to your favorite runlist and common between the two trains (for example, the typical use case could be: you want to make sure that you look at the same runs in the data and in MC). This section only applies to analysis trains, not to trains producing derived data. If you are interested in the latter, please contact me in order to find a solution.
+
+After executing the script `derived.py` twice (one for each analysis train) in separate directories, you should have two directories (one for each analysis train) containing a directory called `alice`. It should contain numerous subdirectories, each containing two files: AnalysisResults.root and download_summary.txt. 
+
+To initiate the merging of the AnalysisResults.root files for the two productions according to a given runlist, 
+- in one of the two directories, open the file `mergeByCommonRun.sh`,
+- edit the line 22 with with the path to the first directory,
+- edit the line 23 with with the path to the second directory,
+- edit the line 24 with your desired runlist, separated with a comma followed by a space like this ", ". If you use different separators, please edit line 25.
+    NOTE: if you copy-paste the runlist from Hyperloop, runs are already separated with ", ", so you don't need to change the separators.
+- Once this is done, type `bash mergeByCommonRun.sh`.
+
+From this stage, both directories should contain a AnalysisResults.root, containing the merged output files coming from your desired runlist and from runs in common between both trains :-D
 
 ## Troubleshooting
 
