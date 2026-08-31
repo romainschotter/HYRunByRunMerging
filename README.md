@@ -1,10 +1,11 @@
 # Hyperloop run-by-run merging
 
-Repository containing files for downloading all output files from Hyperloop run by run, and merging locally only the files associated to a given run list.
+Repository containing files for downloading all output files from Hyperloop run by run (together with the configuration of the train), and merging locally only the files associated to a given run list.
 
 ## What is present?
-Two files are present in the repository:
-- `derived.py`, a Python script in charge of downloading all AnalysisResults.root (and AO2D.root in case of derived data) files from Hyperloop run by run,
+Four files are present in the repository:
+- `derived.py`, a Python script in charge of downloading all AnalysisResults.root (and AO2D.root in case of derived data) files from Hyperloop run by run, as well as the configuration of the train,
+- `download.sh`, a bash script in charge of downloading a single file from a given url, typically a file from the working directory of a train test,
 - `mergeFile.sh`, a bash script in charge of merging the files associated to a given run list.
 - `mergeByCommonRun.sh`, a bash script in charge of merging only the files in common in two datasets and according to a given run list.
 
@@ -14,23 +15,54 @@ In order to merge only the files from a certain runlist, one needs first to down
 
 ### Downloading files run by run
 Before executing the script `derived.py`, 
-- edit the line 183 with your train ID. For instance, let's say we want to download all the files from the train `251632`, the line 183 should be `def getXMLList(train_id=251632,`.
+- edit the line 18 with your train ID. For instance, let's say we want to download all the files from the train `251632`, the line 18 should be `TRAIN_NUMBER = 251632`.
 - load a O2/O2Physics environment,
 - load your certificates and
 - proceed to downloading all the files run by run by typing `python3 derived.py`.
 
-The script will first download a json file containing the info of the job results related to the corresponding train ID, and then it will download the output file of each job.
+The script will first download the configuration of the train (see the section below), then a json file containing the info of the job results related to the corresponding train ID, and finally the output file of each job.
 
-**IMPORTANT 1:** in order to download the files faster, the download is performed in parallel on 12 jobs. In case, you want to reduce the number of jobs, you need to change the variable `NUMBER_OF_JOBS` at line 17. For disabling the parallel download, set the `NUMBER_OF_JOBS` to `1`.
+**IMPORTANT 1:** in order to download the files faster, the download is performed in parallel on 12 jobs. In case, you want to reduce the number of jobs, you need to change the variable `NUMBER_OF_JOBS` at line 19. For disabling the parallel download, set the `NUMBER_OF_JOBS` to `1`.
 
 **IMPORTANT 2:** by default, a directory is created for each run. In case you want to download the output in directories matching the output train directories on the grid (`alice/cern.ch/user/a/alihyperloop/jobs/0<000>/hy_<trainID>`), the variable `RUN_NUMBER_FOR_OUTPUT_PATH` needs to be switched to `False`
 
 **IMPORTANT 3:** in case of derived data, you will not have one file per run, but several files belonging to the same run scattered over different subdirectories. That is because there is no final merging for derived data, there is only an intermediate merging and the train is set to `done` by operators.
-Hence, two options are available: either you can download all AO2D.root and AnalysisResults.root files before any merging (default option), or you can only download the files from the intermediate merging. The choice of option can be changed by turning on True or False, respectively, the boolean at line 20 `DOWNLOAD_ALL`.
+Hence, two options are available: either you can download all AO2D.root and AnalysisResults.root files before any merging (default option), or you can only download the files from the intermediate merging. The choice of option can be changed by turning on True or False, respectively, the boolean at line 22 `DOWNLOAD_ALL`.
 
 **IMPORTANT 4:** after some time, the train output are deleted on the grid, and thus the first option may no longer be available. Although the second option deals with a fewer number of files, in case there was an issue during the merging (merging failed or some files were corrupted), there is no way to fix it afterwards; only the first option offers this flexibility.
 
-**IMPORTANT 5:** when running on the grid, it may happen that some subjobs from a given masterjob (or run) finished in error states. If there are too many subjobs in error states, the merging will not start for this masterjob. In such a case, this masterjob will not be considered in the final merging across all masterjobs/runs, i.e. this masterjob/run will not be included in the final output file. By default, the `derived.py` script reproduces this behaviour and will not download output files from masterjobs that could not proceed to merging. In case you are interested in still having the files from those masterjobs, you can tell the script `derived.py` to download them and merge them locally by switching the variable `DOWNLOAD_ALL_IF_MERGEDFILE_MISSING` at line 21 on `True`. Please note, however, that the best course of action would be to understand why too many jobs went in error. 
+**IMPORTANT 5:** when running on the grid, it may happen that some subjobs from a given masterjob (or run) finished in error states. If there are too many subjobs in error states, the merging will not start for this masterjob. In such a case, this masterjob will not be considered in the final merging across all masterjobs/runs, i.e. this masterjob/run will not be included in the final output file. By default, the `derived.py` script reproduces this behaviour and will not download output files from masterjobs that could not proceed to merging. In case you are interested in still having the files from those masterjobs, you can tell the script `derived.py` to download them and merge them locally by switching the variable `DOWNLOAD_ALL_IF_MERGEDFILE_MISSING` at line 23 on `True`. Please note, however, that the best course of action would be to understand why too many jobs went in error. 
+
+### Downloading the configuration of the train
+On top of the output files, the script also downloads the configuration of the train from the working directory of the train test, located at `https://alimonitor.cern.ch/train-workdir/tests/00XX/00XXYYYY/`, where `00XXYYYY` is the train ID padded with zeros up to 8 digits, and `00XX` its first four digits. For instance, the test of the train `717653` is at `https://alimonitor.cern.ch/train-workdir/tests/0071/00717653/`.
+
+Three files are downloaded in the directory from which the script is executed, next to the directories of the runs:
+- `full_config.json`,
+- `configuration.json`,
+- `stdout.log`.
+
+This step is controlled by the variable `DOWNLOAD_CONFIGURATION` at line 24 (set it to `False` to skip it), and the list of files to download is given by the variable `CONFIGURATION_FILES` at line 25. Files that are already there are not downloaded again, unless the variable `OVERWRITE_FILES` at line 20 is set to `True`.
+
+If one of these files cannot be accessed (it may not exist for this train, or the working directory of the test may no longer be available), the download of the train output is **not** interrupted: the script carries on, and prints at the very end of its execution the list of the files that could not be downloaded, for instance:
+```
+!!! Some configuration files could not be downloaded !!!
+   - `configuration.json` is not available at https://alimonitor.cern.ch/train-workdir/tests/0071/00717653 (http code 404)
+Check that https://alimonitor.cern.ch/train-workdir/tests/0071/00717653 is accessible with your grid certificate
+```
+
+### Entering your pass phrase only once
+Reading the Hyperloop json file and the working directory of the train test requires a grid credential. Two of them can be used:
+- the JAliEn token (`/tmp/tokencert_<uid>.pem` and `/tmp/tokenkey_<uid>.pem`, or the files pointed to by `$JALIEN_TOKEN_CERT` and `$JALIEN_TOKEN_KEY`), created by `alien-token-init` and used by the alien commands. This token is **not** protected by a pass phrase,
+- your grid certificate (`~/.globus/usercert.pem` and `~/.globus/userkey.pem`, see the variables `GRID_KEY_FILE` and `GRID_CERT_FILE` at lines 28 and 29), whose key **is** protected by your pass phrase.
+
+By default (variable `USE_JALIEN_TOKEN` at line 30), the script uses the token, and asks `alien-token-init` for one if there is none or if it is expired. As the very same token is then used to download the output of the train, your pass phrase is asked only once, when the token is created, instead of once for the token and once again for the configuration. If the token is not accepted, the script automatically tries again with your grid certificate, and your pass phrase is then asked.
+
+### Downloading a single file from the working directory of a train test
+Any other file of the working directory of a train test can be downloaded by hand with the script `download.sh`, which takes the url of the directory and the name of the file:
+```
+bash download.sh https://alimonitor.cern.ch/train-workdir/tests/0071/00717653 AO2D.root
+```
+The file is written in the current directory. This script uses your grid certificate and the CA certificates pointed to by `$X509_CERT_DIR`, so a O2/O2Physics environment has to be loaded, and your pass phrase will be asked. It is independent from `derived.py`, which does not call it.
 
 ### Merging files locally based on the run number
 This section only applies to the case where we want to merge the output from an analysis train, not from a derived data production. If you do need to merge output files from a train producing derived data, please contact me in order to find a solution.
@@ -81,6 +113,11 @@ The installation may be unsuccessful because `pip` or `pip3` is not installed fo
 If the installation of the `tqdm` is successful, the following message should be printed: `Successfully installed tqdm-x.xx.x`. From that point, you can proceed to downloading your files via `python3 derived.py`.
 
 In case you are still facing this error after following the above instructions, please find help in the `Others` category.
+
+### Some configuration files could not be downloaded
+At the end of its execution, the script prints the list of the configuration files it could not get, together with the http code returned by the server. This never prevents the output of the train from being downloaded.
+
+A http code `404` means that this file does not exist in the working directory of the train test: nothing can be done about it, simply remove it from the list `CONFIGURATION_FILES` at line 25 if you do not want to be told about it again. Any other code points to an access problem: check that the url printed by the script can be opened in your browser, and that your token is still valid (`alien-token-info`). You can also set the variable `USE_JALIEN_TOKEN` at line 30 to `False` to use your grid certificate directly (your pass phrase will then be asked).
 
 ### Others
 In case you are facing difficulties: please contact me either on Mattermost (rschotte) or via mail (romain.schotter@cern.ch).

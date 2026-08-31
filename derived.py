@@ -7,6 +7,7 @@ import inspect
 from multiprocessing import Pool
 import subprocess
 import xml.etree.ElementTree as ET
+import tempfile
 try:
     import tqdm
 except ImportError as e:
@@ -14,14 +15,23 @@ except ImportError as e:
           "Progress bar will not be available (you can install tqdm for the progress bar) `pip3 install --user tqdm`")
 
 # Modes
+TRAIN_NUMBER = 494198 # train number
 NUMBER_OF_JOBS = 12 # if the number of job is 1, then the download is performed sequentially. If it is greater than 1, the download is performed in parallel using the option -T of the alien_cp command
 OVERWRITE_FILES = False # overwrite already downloaded files?
 RUN_NUMBER_FOR_OUTPUT_PATH = True # use the run number for the output path. If on False, the same path as on the grid is used.
-DOWNLOAD_ALL = True # only in case of downloading derived data! Download ALL AO2Ds and AnalysisResults.root or only those from final merging?
+DOWNLOAD_ALL = False # only in case of downloading derived data! Download ALL AO2Ds and AnalysisResults.root or only those from final merging?
 DOWNLOAD_ALL_IF_MERGEDFILE_MISSING = False # in case the merging (per run) was not done, should we download the output file of each subjobs and do the merging ourselves?
+DOWNLOAD_CONFIGURATION = True # download the configuration of the train (from the working directory of the train test)?
+CONFIGURATION_FILES = ["full_config.json", "configuration.json", "stdout.log"] # files to get from the working directory of the train test
+TRAIN_TEST_URL = "https://alimonitor.cern.ch/train-workdir/tests" # base url of the working directories of the train tests
 
-def run_cmd(cmd, capture = True, stdout_encoded_in_text = False):
-    run_result = subprocess.run(cmd, shell=True, capture_output=capture, text = stdout_encoded_in_text)
+GRID_KEY_FILE = "~/.globus/userkey.pem" # grid key, needed to access the working directory of the train test
+GRID_CERT_FILE = "~/.globus/usercert.pem" # grid certificate, needed to access the working directory of the train test
+USE_JALIEN_TOKEN = True # use the JAliEn token (the one of the alien commands, which is not protected by a pass phrase) instead of the grid certificate, so that the pass phrase is asked only once
+configuration_download_errors = [] # kept along the way and printed at the end of the execution
+
+def run_cmd(cmd, capture = True, stdout_encoded_in_text = False, cwd = None, env = None):
+    run_result = subprocess.run(cmd, shell=True, capture_output=capture, text = stdout_encoded_in_text, cwd = cwd, env = env)
     return run_result
 
 class HyperloopOutput:
@@ -180,20 +190,164 @@ class HyperloopOutput:
             else:
                 return
 
-def getXMLList(train_id=494198,
+def getJAlienToken():
+    # the token created by alien-token-init, and used by the alien commands, is not
+    # protected by a pass phrase: using it for curl too avoids a second pass phrase
+    if not USE_JALIEN_TOKEN:
+        return None
+    cert_file = os.environ.get("JALIEN_TOKEN_CERT", f"/tmp/tokencert_{os.getuid()}.pem")
+    key_file = os.environ.get("JALIEN_TOKEN_KEY", f"/tmp/tokenkey_{os.getuid()}.pem")
+    if not path.isfile(cert_file) or not path.isfile(key_file):
+        return None
+    if not run_cmd(f"openssl x509 -checkend 60 -noout -in {cert_file}").returncode == 0:
+        print("The JAliEn token", f"`{cert_file}`", "is expired")
+        return None
+    return (cert_file, key_file)
+
+def ensureJAlienToken():
+    # ask alien for a token if there is none yet: the pass phrase is then asked by
+    # alien-token-init, and by nothing else during the rest of the execution
+    token = getJAlienToken()
+    if token is not None or not USE_JALIEN_TOKEN:
+        return token
+    if not run_cmd("command -v alien-token-init").returncode == 0:
+        return None
+    print("---> No valid JAliEn token, running alien-token-init")
+    run_cmd("alien-token-init", False)
+    return getJAlienToken()
+
+def getGridCredentials():
+    # (certificate, key) pairs to try, in order: the JAliEn token first (no pass phrase),
+    # the grid certificate as a fallback (in case the token is not accepted)
+    credentials = []
+    token = ensureJAlienToken()
+    if token is not None:
+        credentials.append(token)
+    cert_file = path.expanduser(GRID_CERT_FILE)
+    key_file = path.expanduser(GRID_KEY_FILE)
+    if path.isfile(cert_file) and path.isfile(key_file):
+        credentials.append((cert_file, key_file))
+    else:
+        print("Cannot find the grid certificate", f"`{cert_file}`", "and/or the grid key", f"`{key_file}`")
+    return credentials
+
+def getTrainTestUrl(train_id=TRAIN_NUMBER):
+    # working directory of the test of the train, e.g. for the train 717653:
+    # https://alimonitor.cern.ch/train-workdir/tests/0071/00717653
+    full_number = str(train_id).zfill(8)
+    return f"{TRAIN_TEST_URL}/{full_number[:4]}/{full_number}"
+
+def isValidDownloadedFile(file_name):
+    # a file that could not be accessed is missing, empty, or an html error page
+    if not path.isfile(file_name) or path.getsize(file_name) == 0:
+        return False
+    if file_name.endswith(".json"):
+        try:
+            with open(file_name) as f:
+                json.load(f)
+        except Exception:
+            return False
+        return True
+    with open(file_name, errors="ignore") as f:
+        beginning = f.read(1024).lstrip().lower()
+    return not (beginning.startswith("<!doctype html") or beginning.startswith("<html"))
+
+def downloadConfigurationFiles(base_url, out_dir, file_names, cert_file, key_file):
+    # all the files are asked for in a single curl command, so that a pass phrase, if
+    # one is needed, is asked only once. Returns the http code of the files that could
+    # not be downloaded (0 if curl did not even manage to ask the server)
+    codes_file = path.join(tempfile.gettempdir(), f"curl_http_codes_{os.getpid()}.txt")
+    cmd = "curl --silent --show-error"
+    cert_dir = os.environ.get("X509_CERT_DIR", "/etc/grid-security/certificates")
+    if path.isdir(cert_dir):
+        cmd += f" --capath {cert_dir}"
+    cmd += f" --cert {cert_file} --key {key_file}"
+    cmd += " --write-out \"%{http_code}\\n\""
+    for file_name in file_names:
+        print("---> Downloading", f"{base_url}/{file_name}", "to", path.join(out_dir, file_name))
+        cmd += f" {base_url}/{file_name} --output {file_name}"
+    # the http codes are kept in a file, so that the output of curl (and the prompt for
+    # the pass phrase of the grid key, if any) stays visible
+    cmd += f" > {codes_file}"
+    run_cmd(cmd, False, cwd=out_dir)
+
+    http_codes = []
+    if path.isfile(codes_file):
+        with open(codes_file) as f:
+            http_codes = [line.strip() for line in f if line.strip() != ""]
+        os.remove(codes_file)
+
+    # curl answers with an exit code of 0 and an html error page when a file is not
+    # accessible, so the downloaded files themselves have to be checked
+    failed = []
+    for i, file_name in enumerate(file_names):
+        out_name = path.join(out_dir, file_name)
+        if not isValidDownloadedFile(out_name):
+            if path.isfile(out_name):
+                os.remove(out_name)
+            failed.append((file_name, http_codes[i] if i < len(http_codes) else "0"))
+        else:
+            print("---> Configuration file should be at: " + out_name)
+    return failed
+
+def downloadConfiguration(train_id=TRAIN_NUMBER,
+                          out_path="./",
+                          overwrite=OVERWRITE_FILES):
+    # get the configuration of the train from the working directory of its test.
+    # a file that cannot be accessed is not fatal: the message is kept and printed at the end
+    base_url = getTrainTestUrl(train_id)
+    out_dir = path.abspath(out_path)
+    if not path.isdir(out_dir):
+        print("Preparing directory", f"`{out_dir}`")
+        os.makedirs(out_dir)
+
+    to_download = []
+    for file_name in CONFIGURATION_FILES:
+        if not overwrite and isValidDownloadedFile(path.join(out_dir, file_name)):
+            print("Configuration file", f"`{path.join(out_dir, file_name)}`", "already present, skipping for download")
+        else:
+            to_download.append(file_name)
+    if len(to_download) == 0:
+        return
+
+    credentials = getGridCredentials()
+    if len(credentials) == 0:
+        for file_name in to_download:
+            configuration_download_errors.append(f"`{file_name}`: no grid credential found to read {base_url}")
+        return
+
+    for cert_file, key_file in credentials:
+        print("---> Reading", base_url, "with", cert_file)
+        failed = downloadConfigurationFiles(base_url, out_dir, to_download, cert_file, key_file)
+        to_download = []
+        for file_name, http_code in failed:
+            print("!!! Cannot download ", f"{base_url}/{file_name}", " (http code ", http_code, ") !!!")
+            if http_code == "404": # the file is simply not there, another credential will not help
+                configuration_download_errors.append(f"`{file_name}` is not available at {base_url} (http code 404)")
+            else:
+                to_download.append(file_name)
+        if len(to_download) == 0:
+            break
+    for file_name in to_download: # refused with every credential
+        configuration_download_errors.append(f"`{file_name}` could not be downloaded from {base_url}")
+
+def getXMLList(train_id=TRAIN_NUMBER,
                alien_path="https://alimonitor.cern.ch/alihyperloop-data/trains/train.jsp?train_id=",
                out_path="./",
-               key_file="~/.globus/userkey.pem",
-               cert_file="~/.globus/usercert.pem"):
+               credentials=None):
     out_name = path.join(out_path, f"HyperloopID_{train_id}.json")
-    if not path.isfile(key_file):
-        print("Cannot find key file", key_file)
-    if not path.isfile(cert_file):
-        print("Cannot find cert file", cert_file)
+    if credentials is None:
+        credentials = getGridCredentials()
     if not path.isfile(out_name):
-        download_cmd = f"curl --key {key_file} --cert {cert_file} --insecure {alien_path}{train_id} -o {out_name}"
-        print("run command: " + download_cmd)
-        run_cmd(download_cmd)
+        for cert_file, key_file in credentials:
+            download_cmd = f"curl --key {key_file} --cert {cert_file} --insecure {alien_path}{train_id} -o {out_name}"
+            print("run command: " + download_cmd)
+            run_cmd(download_cmd, False)
+            if isValidDownloadedFile(out_name):
+                break
+            if path.isfile(out_name):
+                os.remove(out_name)
+            print("!!! Cannot read the train", train_id, "with", cert_file, "!!!")
         
     sub_file_list = []
     is_from_analysis = False
@@ -274,6 +428,12 @@ if NUMBER_OF_JOBS > 1:
   if not run_cmd(cmd).returncode == 0:
     print("!!! Cannot execute command ", cmd, " !!!")
 
+if DOWNLOAD_CONFIGURATION:
+  try:
+    downloadConfiguration(train_id=TRAIN_NUMBER, out_path="./")
+  except Exception as e:
+    configuration_download_errors.append(f"The configuration of the train {TRAIN_NUMBER} could not be downloaded: {e}")
+
 xml_list, is_from_analysis = getXMLList()
 for xml in xml_list:
   mergedfile_is_missing = xml.copy_from_alien(parallel_download = is_from_analysis, overwrite=OVERWRITE_FILES)
@@ -292,3 +452,13 @@ if NUMBER_OF_JOBS > 1:
   cmd = f"parallel --bar --verbose -j {NUMBER_OF_JOBS} --colsep ' ' alien_cp {{1}} {{2}} :::: files_to_download.txt"  
   if not run_cmd(cmd, False).returncode == 0:
     print("!!! Cannot download files from files_to_download.txt !!!")
+
+if DOWNLOAD_CONFIGURATION:
+  if len(configuration_download_errors) > 0:
+    print("")
+    print("!!! Some configuration files could not be downloaded !!!")
+    for message in configuration_download_errors:
+      print("   -", message)
+    print("Check that", getTrainTestUrl(TRAIN_NUMBER), "is accessible with your grid certificate")
+  else:
+    print("---> Configuration of the train", TRAIN_NUMBER, "downloaded in", path.abspath("./"))
